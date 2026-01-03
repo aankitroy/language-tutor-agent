@@ -1,3 +1,4 @@
+import asyncio
 import json
 import logging
 import re
@@ -140,6 +141,14 @@ class LearningSessionStorage:
                 
                 logger.info(f"📚 Loaded session for user {user_id}: {document.get('target_language', 'N/A')} - {document.get('current_level', 'beginner')}")
                 
+                # Load conversation history (last 100 messages)
+                conversation_history = document.get("conversation_history", [])
+                # Ensure we only keep the last 100 messages
+                if len(conversation_history) > 100:
+                    conversation_history = conversation_history[-100:]
+                
+                logger.info(f"📝 Loaded {len(conversation_history)} messages from conversation history")
+                
                 return LearningSession(
                     target_language=document.get("target_language", ""),
                     current_level=document.get("current_level", "beginner"),
@@ -147,7 +156,8 @@ class LearningSessionStorage:
                     vocabulary_learned=document.get("vocabulary_learned", []),
                     conversation_count=document.get("conversation_count", 0),
                     practice_mode=document.get("practice_mode", "conversation"),
-                    user_id=user_id
+                    user_id=user_id,
+                    conversation_history=conversation_history
                 )
             else:
                 logger.info(f"🆕 New user detected: {user_id}")
@@ -160,6 +170,9 @@ class LearningSessionStorage:
         """Save LearningSession to ChromaDB"""
         try:
             # Prepare document (full session data as source of truth)
+            # Ensure conversation_history is limited to last 100 messages
+            conversation_history = session.conversation_history[-100:] if len(session.conversation_history) > 100 else session.conversation_history
+            
             document = {
                 "target_language": session.target_language,
                 "current_level": session.current_level,
@@ -167,6 +180,7 @@ class LearningSessionStorage:
                 "vocabulary_learned": session.vocabulary_learned,
                 "conversation_count": session.conversation_count,
                 "practice_mode": session.practice_mode,
+                "conversation_history": conversation_history,
                 "last_updated": datetime.now().isoformat()
             }
             
@@ -205,6 +219,7 @@ class LearningSession:
     conversation_count: int = 0
     practice_mode: str = "conversation"  # conversation, vocabulary, grammar, pronunciation
     user_id: str = ""  # Track which user this belongs to
+    conversation_history: list[dict[str, Any]] = field(default_factory=list)  # Store last 100 messages
 
 
 class LanguageTutorAgent(Agent):
@@ -213,7 +228,17 @@ class LanguageTutorAgent(Agent):
         logger.info("Initializing LanguageTutorAgent...")
         
         super().__init__(
-            instructions="""You are a friendly and patient language learning tutor. Your goal is to help users learn a new language through conversation-based learning.
+            instructions="""You are a friendly and patient language learning tutor, speaking with the warm and professional style of an Indian call center agent. Your goal is to help users learn a new language through conversation-based learning.
+
+SPEAKING STYLE - INDIAN CALL CENTER AGENT:
+- Use a warm, polite, and professional tone throughout
+- Address users as "Sir" or "Ma'am" respectfully
+- Use phrases like "Thank you for calling", "How may I assist you today?", "Is there anything else I can help you with?"
+- Show patience and understanding: "I understand, Sir/Ma'am", "Certainly", "Absolutely", "Let me help you with that"
+- Repeat back what the user said to confirm understanding: "So you would like to learn [language], is that correct, Sir/Ma'am?"
+- Be very accommodating and service-oriented: "I'll be happy to help you with that", "That's absolutely fine", "No problem at all"
+- Use clear, slightly formal English with a helpful and patient demeanor
+- End responses with offers to help: "Is there anything else I can help you with?", "Please feel free to ask if you have any questions"
 
 CRITICAL PRONUNCIATION RULE: When teaching words or phrases in the target language (especially Telugu, Hindi, or any non-English language), you MUST pronounce them using the NATIVE pronunciation and accent of that language. Do NOT use English pronunciation for non-English words.
 
@@ -224,31 +249,37 @@ For example:
 - Always use the native accent and pronunciation for the target language words
 
 When a user first connects:
-1. Greet them warmly and ask which language they would like to learn
-2. Once they specify a language, confirm it and start the learning session
+1. Greet them warmly in the call center style: "Hello, Sir/Ma'am! Thank you for calling our language learning service. How may I assist you today?"
+2. Ask which language they would like to learn: "Which language would you like to learn today, Sir/Ma'am?"
+3. Once they specify a language, confirm it: "So you would like to learn [language], is that correct, Sir/Ma'am? I'll be happy to help you with that."
+4. Start the learning session with enthusiasm: "Excellent! Let's begin your [language] learning journey. I'm here to help you every step of the way."
 
 During the learning session:
-- Conduct natural conversations in the target language
+- Conduct natural conversations in the target language with call center professionalism
 - Start with simple greetings and basic phrases
 - When speaking words/phrases in the target language, use NATIVE pronunciation and accent - this is CRITICAL
-- When explaining in English, use English pronunciation
+- When explaining in English, use English pronunciation with your warm, professional call center style
 - DO NOT repeat phrases with English translations in parentheses - speak naturally in the target language
 - If you need to explain meaning, do it separately in English, not inline with the target language phrase
-- For example, say "నమస్కారం" naturally, then separately explain "That means 'Hello' in Telugu" - don't say "నమస్కారం (Namaskaram, Hello)"
+- For example, say "నమస్కారం" naturally, then separately explain "That means 'Hello' in Telugu, Sir/Ma'am" - don't say "నమస్కారం (Namaskaram, Hello)"
 - Gradually introduce new vocabulary and phrases with proper native pronunciation
-- Correct mistakes gently and provide explanations
-- Encourage the user to practice speaking with native pronunciation
+- Correct mistakes gently and provide explanations: "That's okay, Sir/Ma'am. Let me help you with the correct pronunciation..."
+- Encourage the user to practice speaking with native pronunciation: "That's very good, Sir/Ma'am! Keep practicing, and you'll get even better."
 - Use English to explain concepts when needed, but prioritize using the target language with native pronunciation
 - Make learning fun and engaging with real-world scenarios (ordering food, asking directions, etc.)
 - Track their progress and adjust difficulty accordingly
+- Always be patient, encouraging, and supportive: "Take your time, Sir/Ma'am. There's no rush. I'm here to help you."
 
-Be patient, encouraging, and adapt to the user's learning pace. Celebrate their progress and make them feel comfortable making mistakes.
+Be patient, encouraging, and adapt to the user's learning pace. Celebrate their progress and make them feel comfortable making mistakes. Always maintain your warm, professional call center agent demeanor.
 
-REMEMBER: Always use native pronunciation and accent for the target language words. Never use English accent for non-English words. This is especially important for Telugu, Hindi, and other Indian languages.
+REMEMBER: 
+- Always use native pronunciation and accent for the target language words. Never use English accent for non-English words. This is especially important for Telugu, Hindi, and other Indian languages.
+- Maintain your polite, professional call center agent speaking style throughout all interactions.
+- Address users respectfully as "Sir" or "Ma'am" and offer assistance frequently.
 
 CRITICAL: Avoid repetitive patterns like "Telugu phrase (English translation)". Instead:
 - Speak naturally in the target language without inline translations
-- If explanation is needed, provide it separately: "నమస్కారం. That means 'Hello' in Telugu."
+- If explanation is needed, provide it separately: "నమస్కారం. That means 'Hello' in Telugu, Sir/Ma'am."
 - Do NOT use patterns like "నమస్కారం (Namaskaram, Hello)" - this is repetitive and irritating
 - Keep conversations natural and flowing, not mechanical with constant translations
 
@@ -288,11 +319,7 @@ IMPORTANT: Never use control characters, special formatting codes, or non-printa
         session_data.target_language = language
         session_data.current_level = level
         
-        # Save immediately (user_id should always be set from entrypoint)
-        if session_data.user_id:
-            session_storage.save_session(session_data.user_id, session_data)
-        else:
-            logger.warning("start_learning_session: user_id not set, progress not saved")
+        # Note: Session will be saved on exit, not during conversation
         
         elapsed = time.time() - start_time
         logger.info(f"🌍 LANGUAGE LEARNING SESSION STARTED! Language: {language}, Level: {level} (took {elapsed:.3f}s)")
@@ -334,9 +361,7 @@ IMPORTANT: Never use control characters, special formatting codes, or non-printa
         if topic not in session_data.topics_covered:
             session_data.topics_covered.append(topic)
         
-        # Save progress
-        if session_data.user_id:
-            session_storage.save_session(session_data.user_id, session_data)
+        # Note: Session will be saved on exit, not during conversation
         
         elapsed = time.time() - start_time
         logger.info(f"📚 NEW VOCABULARY INTRODUCED! Topic: {topic}, Words: {len(words)} (took {elapsed:.3f}s)")
@@ -376,9 +401,7 @@ IMPORTANT: Never use control characters, special formatting codes, or non-printa
         if scenario not in session_data.topics_covered:
             session_data.topics_covered.append(scenario)
         
-        # Save progress
-        if session_data.user_id:
-            session_storage.save_session(session_data.user_id, session_data)
+        # Note: Session will be saved on exit, not during conversation
         
         scenarios = {
             "restaurant": "Let's practice ordering food at a restaurant!",
@@ -590,13 +613,17 @@ async def entrypoint(ctx: agents.JobContext):
             voice="Aoede",
             language="en-IN",
             vertexai=True,
+            # Note: proactivity and enable_affective_dialog can sometimes cause the agent to wait/hang
+            # Disable if experiencing stuck behavior
+            proactivity=False,  # Set to False if agent gets stuck waiting
+            enable_affective_dialog=False,  # Set to False if agent gets stuck waiting
         )
         
         # Create session with LearningSession as userdata (source of truth)
         session = AgentSession[LearningSession](
             userdata=learning_session,  # Pass loaded/created session as userdata
             video_sampler=VoiceActivityVideoSampler(speaking_fps=0.3, silent_fps=0.2),
-            user_away_timeout=5,
+            user_away_timeout=10,  # Increased from 5 to 10 seconds to avoid premature timeouts
             llm=llm_model,
             vad=vad
         )
@@ -612,7 +639,7 @@ async def entrypoint(ctx: agents.JobContext):
         # Add conversation logging handlers with improved error handling and debugging
         @session.on("user_input_transcribed")
         def on_user_transcript(event):
-            """Log user input transcriptions - only FINAL transcriptions"""
+            """Log user input transcriptions - only FINAL transcriptions, and store in conversation_history"""
             try:
                 # Try multiple ways to access transcript
                 transcript_text = None
@@ -631,13 +658,36 @@ async def entrypoint(ctx: agents.JobContext):
                         # Only log FINAL transcriptions - skip INTERIM completely
                         if is_final:
                             logger.info(f"👤 USER: {transcript_text}")
+                            
+                            # Store in conversation_history
+                            try:
+                                session_data = session.userdata
+                                if session_data:
+                                    # Sanitize text before storing
+                                    sanitized_text = sanitize_text(transcript_text)
+                                    if sanitized_text:
+                                        # Add message to history
+                                        message_entry = {
+                                            "role": "user",
+                                            "content": sanitized_text,
+                                            "timestamp": datetime.now().isoformat()
+                                        }
+                                        session_data.conversation_history.append(message_entry)
+                                        
+                                        # Keep only last 100 messages
+                                        if len(session_data.conversation_history) > 100:
+                                            session_data.conversation_history = session_data.conversation_history[-100:]
+                                        
+                                        # Note: Session will be saved on exit, not during conversation
+                            except Exception as store_error:
+                                logger.debug(f"Error storing user message in history: {store_error}")
                         # INTERIM transcriptions are completely skipped (not logged at any level)
             except Exception as e:
                 logger.error(f"Error logging user transcript: {e}", exc_info=True)
         
         @session.on("agent_response")
         def on_agent_response(event):
-            """Log agent responses"""
+            """Log agent responses only - conversation_item_added handles storage to avoid duplicates"""
             try:
                 logger.debug(f"Agent response event received: {type(event).__name__}")
                 
@@ -655,13 +705,14 @@ async def entrypoint(ctx: agents.JobContext):
                     response_text = sanitize_text(response_text)
                     if response_text:
                         logger.info(f"🤖 AGENT: {response_text}")
+                        # NOTE: Storage is handled by conversation_item_added event to avoid duplicates
             except Exception as e:
                 logger.error(f"Error logging agent response: {e}", exc_info=True)
         
         # Log conversation items
         @session.on("conversation_item_added")
         def on_conversation_item(event):
-            """Log conversation items"""
+            """Log conversation items and store in conversation_history"""
             try:
                 if hasattr(event, 'item'):
                     item = event.item
@@ -674,11 +725,58 @@ async def entrypoint(ctx: agents.JobContext):
                         elif isinstance(content, list):
                             # Handle list of content items
                             content = [sanitize_text(str(c)) if isinstance(c, str) else str(c) for c in content]
+                            content = " ".join(str(c) for c in content)  # Join list items
                         else:
                             content = sanitize_text(str(content))
                         
                         if content:
                             logger.info(f"💬 CONVERSATION [{role.upper()}]: {content}")
+                            
+                            # Store in conversation_history (only if role is user or assistant)
+                            try:
+                                session_data = session.userdata
+                                if session_data and role in ["user", "assistant"]:
+                                    # Deduplication: Check if this exact message was just added (prevent duplicates)
+                                    is_duplicate = False
+                                    if session_data.conversation_history:
+                                        last_message = session_data.conversation_history[-1]
+                                        # Check if same role and content (exact match)
+                                        if (last_message.get("role") == role and 
+                                            last_message.get("content") == content):
+                                            # Check timestamp if available
+                                            try:
+                                                last_timestamp = last_message.get("timestamp", "")
+                                                if last_timestamp:
+                                                    time_diff = (datetime.now() - datetime.fromisoformat(last_timestamp)).total_seconds()
+                                                    # Only consider duplicate if within 1 second (very recent)
+                                                    if time_diff < 1.0:
+                                                        is_duplicate = True
+                                                        logger.debug(f"Skipping duplicate message: {content[:50]}...")
+                                                else:
+                                                    # If no timestamp, assume duplicate if content matches exactly
+                                                    is_duplicate = True
+                                                    logger.debug(f"Skipping duplicate message (no timestamp): {content[:50]}...")
+                                            except (ValueError, TypeError) as time_error:
+                                                # If timestamp parsing fails, just check content match
+                                                is_duplicate = True
+                                                logger.debug(f"Skipping duplicate message (timestamp error): {content[:50]}...")
+                                    
+                                    if not is_duplicate:
+                                        # Add message to history
+                                        message_entry = {
+                                            "role": role,
+                                            "content": content,
+                                            "timestamp": datetime.now().isoformat()
+                                        }
+                                        session_data.conversation_history.append(message_entry)
+                                        
+                                        # Keep only last 100 messages
+                                        if len(session_data.conversation_history) > 100:
+                                            session_data.conversation_history = session_data.conversation_history[-100:]
+                                        
+                                        # Note: Session will be saved on exit, not during conversation
+                            except Exception as store_error:
+                                logger.debug(f"Error storing conversation item in history: {store_error}")
             except Exception as e:
                 logger.debug(f"Error logging conversation item: {e}")
         
