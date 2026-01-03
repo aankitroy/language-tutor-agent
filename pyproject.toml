@@ -1,0 +1,11 @@
+[project]
+name = "language-tutor"
+version = "0.1.0"
+requires-python = ">=3.11"
+dependencies = [
+    "livekit-agents[openai,google,silero]~=1.3",
+    "livekit-plugins-noise-cancellation~=0.2",
+    "python-dotenv>=1.1.1",
+    "chromadb>=0.4.0",
+]
+
