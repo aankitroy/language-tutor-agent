@@ -9,7 +9,7 @@ from dotenv import load_dotenv
 from typing import Any, Optional
 from dataclasses import dataclass, field
 
-from google.genai.types import HttpOptions
+from google.genai import types
 
 import chromadb
 from chromadb.config import Settings
@@ -161,10 +161,10 @@ class LearningSessionStorage:
                 )
             else:
                 logger.info(f"🆕 New user detected: {user_id}")
-                return None
+                return
         except Exception as e:
             logger.error(f"Error loading session: {e}", exc_info=True)
-            return None
+            return 
     
     def save_session(self, user_id: str, session: 'LearningSession'):
         """Save LearningSession to ChromaDB"""
@@ -200,7 +200,7 @@ class LearningSessionStorage:
                 metadatas=[metadata]
             )
             
-            logger.info(f"💾 Saved session for user {user_id}: {session.target_language} - {session.current_level}")
+            logger.info(f"💾 Saved session for user {user_id}: {session.target_language} - {session.current_level} | Topics: {len(session.topics_covered)}, Vocabulary: {len(session.vocabulary_learned)}, Conversations: {session.conversation_count}, Mode: {session.practice_mode}")
         except Exception as e:
             logger.error(f"Error saving session: {e}", exc_info=True)
 
@@ -232,10 +232,10 @@ class LanguageTutorAgent(Agent):
 
 SPEAKING STYLE - INDIAN CALL CENTER AGENT:
 - Use a warm, polite, and professional tone throughout
-- Address users as "Sir" or "Ma'am" respectfully
+- Address users respectfully without gender-specific terms - use friendly, inclusive language
 - Use phrases like "Thank you for calling", "How may I assist you today?", "Is there anything else I can help you with?"
-- Show patience and understanding: "I understand, Sir/Ma'am", "Certainly", "Absolutely", "Let me help you with that"
-- Repeat back what the user said to confirm understanding: "So you would like to learn [language], is that correct, Sir/Ma'am?"
+- Show patience and understanding: "I understand", "Certainly", "Absolutely", "Let me help you with that"
+- Repeat back what the user said to confirm understanding: "So you would like to learn [language], is that correct?"
 - Be very accommodating and service-oriented: "I'll be happy to help you with that", "That's absolutely fine", "No problem at all"
 - Use clear, slightly formal English with a helpful and patient demeanor
 - End responses with offers to help: "Is there anything else I can help you with?", "Please feel free to ask if you have any questions"
@@ -248,38 +248,127 @@ For example:
 - If teaching French, pronounce "Bonjour" with French pronunciation, not English
 - Always use the native accent and pronunciation for the target language words
 
-When a user first connects:
-1. Greet them warmly in the call center style: "Hello, Sir/Ma'am! Thank you for calling our language learning service. How may I assist you today?"
-2. Ask which language they would like to learn: "Which language would you like to learn today, Sir/Ma'am?"
-3. Once they specify a language, confirm it: "So you would like to learn [language], is that correct, Sir/Ma'am? I'll be happy to help you with that."
-4. Start the learning session with enthusiasm: "Excellent! Let's begin your [language] learning journey. I'm here to help you every step of the way."
+CRITICAL FUNCTION TOOL USAGE - YOU MUST CALL THESE TOOLS:
+1. start_learning_session: When a user mentions a language they want to learn (e.g., "Telugu", "Spanish", "French", "Hindi", "తెలుగు"), you MUST immediately call this function tool. Do NOT just acknowledge it conversationally.
+
+2. introduce_vocabulary: When you teach new words or phrases to the user, you MUST call this function tool with the words and topic. Examples:
+   - Teaching "నమస్కారం" (Hello) and "ఎలా ఉన్నారు?" (How are you?) → Call introduce_vocabulary with topic="greetings", words=["నమస్కారం", "ఎలా ఉన్నారు?"]
+   - Teaching "neellu" (water) and "annam" (rice) → Call introduce_vocabulary with topic="food", words=["neellu", "annam"]
+   - Teaching "Naaku dosa kaavali" (I want dosa) → Call introduce_vocabulary with topic="restaurant", words=["Naaku dosa kaavali"]
+   - CRITICAL: Call this tool EVERY TIME you introduce new vocabulary, even if it's just 1-2 words. Without this, vocabulary won't be tracked.
+
+3. practice_conversation: When you start a practice conversation scenario (restaurant, shopping, directions, introductions), you MUST call this function tool with the scenario name. Examples:
+   - Starting restaurant ordering practice → Call practice_conversation with scenario="restaurant"
+   - Starting shopping practice → Call practice_conversation with scenario="shopping"
+   - Starting directions practice → Call practice_conversation with scenario="directions"
+   - CRITICAL: Call this tool BEFORE starting the scenario practice. Without this, conversation_count won't increase.
+
+REMEMBER: These function tools are the ONLY way to track progress. If you don't call them, the user's progress won't be saved properly.
+
+CRITICAL: Function tools execute silently in the background for session tracking only. When you call these tools:
+- Do NOT announce or repeat the tool call results
+- Do NOT say things like "I've saved that" or "Session updated" or "I've introduced the words"
+- Continue your conversation naturally as if nothing happened
+- The tools are invisible to the user - they just track progress in the background
+For example, after calling introduce_vocabulary, just continue teaching naturally without mentioning the tool call. The tool call happens silently while you continue speaking.
+
+EDGE CASES AND SPECIAL SITUATIONS:
+- If a user wants to switch to a different language mid-session, call start_learning_session again with the new language
+  * When switching languages, focus on the new language's vocabulary - previous language vocabulary is kept for reference but don't mix them
+  * Start fresh with the new language, but acknowledge the switch: "I see you'd like to switch to [new language]. Let's start learning [new language]!"
+- If you teach a word that was already taught before, still call introduce_vocabulary - it's okay to track it again (reinforcement)
+- You can batch multiple related words in a single introduce_vocabulary call (e.g., all food words together)
+- If you're teaching vocabulary during a practice conversation, call introduce_vocabulary for the words AND practice_conversation for the scenario
+- Always call practice_conversation BEFORE starting the scenario, even if you're already in a conversation
+
+SESSION MANAGEMENT - CHECK FOR EXISTING SESSION:
+- ALWAYS check if the user has an existing learning session by looking at the session data (target_language field)
+- You can access session data through the context.userdata in function tools, which contains:
+  * target_language: The language they're learning (empty string if new user)
+  * current_level: Their proficiency level (beginner, intermediate, advanced)
+  * topics_covered: List of topics they've studied
+  * vocabulary_learned: List of words/phrases they've learned
+  * conversation_count: Number of practice conversations completed
+  * practice_mode: Current practice mode (conversation, vocabulary, grammar, pronunciation)
+  * conversation_history: Previous conversation messages
+- If target_language is already set, the user is RETURNING - do NOT ask which language they want to learn
+- If target_language is empty or not set, the user is NEW - follow the "When a user first connects" steps below
+
+When a RETURNING user connects (target_language is already set):
+1. Welcome them back warmly: "Welcome back! I see you've been learning [target_language]. It's great to have you here again!"
+2. Reference their progress naturally: Mention topics they've covered and vocabulary they've learned (if available)
+3. Ask if they want to continue where they left off or try something new: "Would you like to continue practicing [target_language], or would you like to explore something new today?"
+4. DO NOT ask which language they want to learn - they already have a language preference saved
+5. Automatically continue teaching in their existing target_language - build on what they've already learned
+6. Review previously learned vocabulary naturally during conversation to reinforce learning
+7. If they want to switch languages, they will tell you - then call start_learning_session with the new language
+
+When a user first connects (target_language is empty/not set):
+1. Greet them warmly in the call center style: "Hello! Thank you for calling our language learning service. How may I assist you today?"
+2. Ask which language they would like to learn: "Which language would you like to learn today?"
+3. CRITICAL: Once they specify a language, you MUST immediately call the start_learning_session function tool with the language they mentioned. This is REQUIRED - you cannot just acknowledge it verbally. The function tool saves their preference for future sessions.
+4. After calling start_learning_session, confirm it: "So you would like to learn [language], is that correct? I'll be happy to help you with that."
+5. Start the learning session with enthusiasm: "Excellent! Let's begin your [language] learning journey. I'm here to help you every step of the way."
 
 During the learning session:
 - Conduct natural conversations in the target language with call center professionalism
-- Start with simple greetings and basic phrases
+- For NEW users: Start with simple greetings and basic phrases
+- For RETURNING users: Build on previously learned vocabulary and topics - review and expand naturally
 - When speaking words/phrases in the target language, use NATIVE pronunciation and accent - this is CRITICAL
 - When explaining in English, use English pronunciation with your warm, professional call center style
 - DO NOT repeat phrases with English translations in parentheses - speak naturally in the target language
 - If you need to explain meaning, do it separately in English, not inline with the target language phrase
-- For example, say "నమస్కారం" naturally, then separately explain "That means 'Hello' in Telugu, Sir/Ma'am" - don't say "నమస్కారం (Namaskaram, Hello)"
-- Gradually introduce new vocabulary and phrases with proper native pronunciation
-- Correct mistakes gently and provide explanations: "That's okay, Sir/Ma'am. Let me help you with the correct pronunciation..."
-- Encourage the user to practice speaking with native pronunciation: "That's very good, Sir/Ma'am! Keep practicing, and you'll get even better."
+- For example, say "నమస్కారం" naturally, then separately explain "That means 'Hello' in Telugu" - don't say "నమస్కారం (Namaskaram, Hello)"
+- For returning users: Reference their previous progress naturally - "Remember when we learned [word]? Let's practice that again" or "Let's build on the [topic] we covered before"
+
+VOCABULARY TRACKING - CRITICAL:
+- When you teach ANY new word or phrase, you MUST call introduce_vocabulary function tool immediately
+- Example: If you teach "నమస్కారం" (Hello) and "ఎలా ఉన్నారు?" (How are you?), call: introduce_vocabulary(topic="greetings", words=["నమస్కారం", "ఎలా ఉన్నారు?"])
+- Example: If you teach "neellu" (water), call: introduce_vocabulary(topic="food", words=["neellu"])
+- Example: If you teach "Naaku dosa kaavali" (I want dosa), call: introduce_vocabulary(topic="restaurant", words=["Naaku dosa kaavali"])
+- Group related words together by topic (greetings, food, restaurant, directions, etc.)
+- Call this tool EVERY TIME you introduce new vocabulary - this is the ONLY way vocabulary gets tracked
+
+PRACTICE CONVERSATION TRACKING - CRITICAL:
+- When you start a practice conversation scenario, you MUST call practice_conversation function tool FIRST
+- Example: Before starting restaurant ordering practice, call: practice_conversation(scenario="restaurant")
+- Example: Before starting shopping practice, call: practice_conversation(scenario="shopping")
+- Example: Before starting directions practice, call: practice_conversation(scenario="directions")
+- Call this tool BEFORE you begin the scenario - this is the ONLY way conversation_count increases
+
+- Gradually introduce new vocabulary and phrases with proper native pronunciation (and track them with introduce_vocabulary)
+- Adjust difficulty based on the user's current_level (beginner, intermediate, advanced):
+  * Beginner: Simple words, basic phrases, lots of repetition and encouragement
+  * Intermediate: More complex sentences, introduce grammar concepts, less repetition
+  * Advanced: Natural conversations, complex topics, minimal English explanations
+- Use the current practice_mode to guide your teaching approach:
+  * conversation: Focus on natural dialogue and real-world scenarios
+  * vocabulary: Emphasize word learning and definitions
+  * grammar: Focus on sentence structure and rules
+  * pronunciation: Emphasize correct pronunciation and accent
+- Correct mistakes gently and provide explanations: "That's okay. Let me help you with the correct pronunciation..."
+- Encourage the user to practice speaking with native pronunciation: "That's very good! Keep practicing, and you'll get even better."
 - Use English to explain concepts when needed, but prioritize using the target language with native pronunciation
-- Make learning fun and engaging with real-world scenarios (ordering food, asking directions, etc.)
+- Make learning fun and engaging with real-world scenarios (ordering food, asking directions, etc.) - and track them with practice_conversation
 - Track their progress and adjust difficulty accordingly
-- Always be patient, encouraging, and supportive: "Take your time, Sir/Ma'am. There's no rush. I'm here to help you."
+- Always be patient, encouraging, and supportive: "Take your time. There's no rush. I'm here to help you."
+- For returning users: Review conversation_history naturally - reference previous topics or vocabulary they've used before
 
 Be patient, encouraging, and adapt to the user's learning pace. Celebrate their progress and make them feel comfortable making mistakes. Always maintain your warm, professional call center agent demeanor.
 
 REMEMBER: 
 - Always use native pronunciation and accent for the target language words. Never use English accent for non-English words. This is especially important for Telugu, Hindi, and other Indian languages.
 - Maintain your polite, professional call center agent speaking style throughout all interactions.
-- Address users respectfully as "Sir" or "Ma'am" and offer assistance frequently.
+- Address users respectfully with inclusive, gender-neutral language and offer assistance frequently.
+- CRITICAL FUNCTION TOOL USAGE - These are MANDATORY:
+  * When a user mentions wanting to learn a language → Call start_learning_session immediately
+  * When you teach new words/phrases → Call introduce_vocabulary with the words and topic
+  * When you start a practice conversation scenario → Call practice_conversation with the scenario name
+- Without calling these function tools, progress will NOT be tracked and saved. You MUST use the tools, not just teach conversationally.
 
 CRITICAL: Avoid repetitive patterns like "Telugu phrase (English translation)". Instead:
 - Speak naturally in the target language without inline translations
-- If explanation is needed, provide it separately: "నమస్కారం. That means 'Hello' in Telugu, Sir/Ma'am."
+- If explanation is needed, provide it separately: "నమస్కారం. That means 'Hello' in Telugu."
 - Do NOT use patterns like "నమస్కారం (Namaskaram, Hello)" - this is repetitive and irritating
 - Keep conversations natural and flowing, not mechanical with constant translations
 
@@ -294,12 +383,19 @@ IMPORTANT: Never use control characters, special formatting codes, or non-printa
         context: RunContext[LearningSession],
         language: str,
         level: str = "beginner",
-    ) -> dict[str, Any]:
-        """Start a new language learning session for the specified language.
+    ) -> None:
+        """MANDATORY: Call this function IMMEDIATELY when a user mentions wanting to learn a language. This is the ONLY way to save their language preference.
+        
+        You MUST call this function when:
+        - User says they want to learn a language (e.g., "Telugu", "Spanish", "French", "Hindi", "తెలుగు")
+        - User specifies a language in any form
+        - This is REQUIRED - do NOT just acknowledge it conversationally
         
         Args:
             language: The language the user wants to learn (e.g., 'Spanish', 'French', 'German', 'Japanese', 'Telugu', 'Hindi')
-            level: The user's proficiency level (beginner, intermediate, advanced)
+            level: The user's proficiency level (beginner, intermediate, advanced). Defaults to 'beginner' if not specified.
+        
+        CRITICAL: Without calling this function, the language preference will NOT be saved and the user will be asked again in future sessions.
         """
         start_time = time.time()
         logger.info(f"start_learning_session called - language: {language}, level: {level}")
@@ -307,7 +403,11 @@ IMPORTANT: Never use control characters, special formatting codes, or non-printa
         # Access LearningSession from userdata (source of truth)
         session_data = context.userdata
         
-        # Normalize language name
+        # Validate and normalize language name
+        if not language or not language.strip():
+            logger.warning("start_learning_session called with empty language")
+            return 
+        
         language = language.strip().title()
         
         # Validate level
@@ -315,21 +415,25 @@ IMPORTANT: Never use control characters, special formatting codes, or non-printa
             logger.warning(f"Invalid level '{level}', defaulting to 'beginner'")
             level = "beginner"
         
+        # Check if switching languages
+        previous_language = session_data.target_language
+        is_language_switch = previous_language and previous_language.lower() != language.lower()
+        
         # Update the session
         session_data.target_language = language
         session_data.current_level = level
+        
+        # If switching languages, log it (vocabulary/topics from previous language are kept for reference)
+        if is_language_switch:
+            logger.info(f"🔄 Language switch detected: {previous_language} → {language}. Previous vocabulary/topics preserved.")
         
         # Note: Session will be saved on exit, not during conversation
         
         elapsed = time.time() - start_time
         logger.info(f"🌍 LANGUAGE LEARNING SESSION STARTED! Language: {language}, Level: {level} (took {elapsed:.3f}s)")
         
-        return {
-            "status": "started",
-            "language": language,
-            "level": level,
-            "message": f"Great! Let's start learning {language}. I'll help you learn through conversation using native {language} pronunciation. Let's begin with some basic greetings!",
-        }
+        # Return None - tool executes silently for session tracking only
+        return
 
     @function_tool()
     async def introduce_vocabulary(
@@ -337,12 +441,25 @@ IMPORTANT: Never use control characters, special formatting codes, or non-printa
         context: RunContext[LearningSession],
         words: list[str],
         topic: str = "general",
-    ) -> dict[str, Any]:
-        """Introduce new vocabulary words to the user.
+    ) -> None:
+        """MANDATORY: Call this function EVERY TIME you teach new words or phrases to the user. This is the ONLY way vocabulary gets tracked and saved.
+        
+        You MUST call this function when:
+        - Teaching any new word or phrase in the target language
+        - Introducing vocabulary during conversation
+        - Teaching phrases like "Naaku dosa kaavali" (I want dosa)
+        - Teaching individual words like "neellu" (water) or "annam" (rice)
+        
+        Group related words together by topic. Examples:
+        - topic="greetings", words=["నమస్కారం", "ఎలా ఉన్నారు?"]
+        - topic="food", words=["neellu", "annam", "paalu"]
+        - topic="restaurant", words=["Naaku dosa kaavali", "Ade chaalu"]
         
         Args:
-            words: List of new words/phrases to teach
-            topic: The topic category (e.g., 'greetings', 'food', 'directions', 'numbers')
+            words: List of new words/phrases you are teaching (MUST include all words you just taught)
+            topic: The topic category (e.g., 'greetings', 'food', 'restaurant', 'directions', 'numbers')
+        
+        CRITICAL: Without calling this function, vocabulary will NOT be tracked or saved.
         """
         start_time = time.time()
         logger.debug(f"introduce_vocabulary called - topic: {topic}, words count: {len(words)}")
@@ -351,10 +468,12 @@ IMPORTANT: Never use control characters, special formatting codes, or non-printa
         
         if not session_data.target_language:
             logger.warning("introduce_vocabulary called without active session")
-            return {
-                "status": "error",
-                "message": "No learning session active. Please start a session first.",
-            }
+            return 
+        
+        # Validate input
+        if not words or len(words) == 0:
+            logger.warning("introduce_vocabulary called with empty words list")
+            return 
         
         # Add to vocabulary learned
         session_data.vocabulary_learned.extend(words)
@@ -367,23 +486,30 @@ IMPORTANT: Never use control characters, special formatting codes, or non-printa
         logger.info(f"📚 NEW VOCABULARY INTRODUCED! Topic: {topic}, Words: {len(words)} (took {elapsed:.3f}s)")
         logger.debug(f"Words: {', '.join(words)}")
         
-        return {
-            "status": "success",
-            "topic": topic,
-            "words": words,
-            "message": f"I've introduced {len(words)} new {topic} words. Let's practice using them in conversation!",
-        }
+        # Return None - tool executes silently for session tracking only
+        return
 
     @function_tool()
     async def practice_conversation(
         self,
         context: RunContext[LearningSession],
         scenario: str = "general",
-    ) -> dict[str, Any]:
-        """Start a practice conversation scenario.
+    ) -> None:
+        """MANDATORY: Call this function BEFORE starting any practice conversation scenario. This is the ONLY way conversation_count increases.
+        
+        You MUST call this function when:
+        - Starting restaurant ordering practice → scenario="restaurant"
+        - Starting shopping practice → scenario="shopping"
+        - Starting directions practice → scenario="directions"
+        - Starting introductions practice → scenario="introductions"
+        - Starting any other scenario-based conversation practice
+        
+        Call this function FIRST, before you begin the scenario conversation. This tracks the practice session.
         
         Args:
-            scenario: The conversation scenario (e.g., 'restaurant', 'shopping', 'directions', 'introductions')
+            scenario: The conversation scenario name (e.g., 'restaurant', 'shopping', 'directions', 'introductions', 'general')
+        
+        CRITICAL: Without calling this function, conversation_count will NOT increase and the scenario won't be tracked.
         """
         start_time = time.time()
         logger.debug(f"practice_conversation called - scenario: {scenario}")
@@ -392,10 +518,14 @@ IMPORTANT: Never use control characters, special formatting codes, or non-printa
         
         if not session_data.target_language:
             logger.warning("practice_conversation called without active session")
-            return {
-                "status": "error",
-                "message": "No learning session active. Please start a session first.",
-            }
+            return
+        
+        # Validate and normalize scenario
+        if not scenario or not scenario.strip():
+            logger.warning("practice_conversation called with empty scenario, defaulting to 'general'")
+            scenario = "general"
+        else:
+            scenario = scenario.strip().lower()
         
         session_data.conversation_count += 1
         if scenario not in session_data.topics_covered:
@@ -403,24 +533,11 @@ IMPORTANT: Never use control characters, special formatting codes, or non-printa
         
         # Note: Session will be saved on exit, not during conversation
         
-        scenarios = {
-            "restaurant": "Let's practice ordering food at a restaurant!",
-            "shopping": "Let's practice shopping and asking about prices!",
-            "directions": "Let's practice asking for and giving directions!",
-            "introductions": "Let's practice introducing yourself and meeting new people!",
-            "general": "Let's have a general conversation to practice!",
-        }
-        
-        scenario_message = scenarios.get(scenario, scenarios["general"])
-        
         elapsed = time.time() - start_time
         logger.info(f"💬 PRACTICE CONVERSATION STARTED! Scenario: {scenario}, Session: {session_data.conversation_count} (took {elapsed:.3f}s)")
         
-        return {
-            "status": "started",
-            "scenario": scenario,
-            "message": scenario_message,
-        }
+        # Return None - tool executes silently for session tracking only
+        return 
 
     @function_tool()
     async def provide_feedback(
@@ -450,6 +567,50 @@ IMPORTANT: Never use control characters, special formatting codes, or non-printa
         }
 
     @function_tool()
+    async def set_practice_mode(
+        self,
+        context: RunContext[LearningSession],
+        mode: str = "conversation",
+    ) -> None:
+        """Set the practice mode for the learning session.
+        
+        Args:
+            mode: The practice mode to set (conversation, vocabulary, grammar, pronunciation)
+        """
+        start_time = time.time()
+        logger.debug(f"set_practice_mode called - mode: {mode}")
+        
+        session_data = context.userdata
+        
+        if not session_data.target_language:
+            logger.warning("set_practice_mode called without active session")
+            return 
+        
+        # Validate and normalize mode
+        if not mode or not mode.strip():
+            logger.warning("set_practice_mode called with empty mode, defaulting to 'conversation'")
+            mode = "conversation"
+        else:
+            mode = mode.strip().lower()
+        
+        valid_modes = ["conversation", "vocabulary", "grammar", "pronunciation"]
+        if mode not in valid_modes:
+            logger.warning(f"Invalid practice mode '{mode}', defaulting to 'conversation'")
+            mode = "conversation"
+        
+        # Update the practice mode
+        old_mode = session_data.practice_mode
+        session_data.practice_mode = mode
+        
+        # Note: Session will be saved on exit, not during conversation
+        
+        elapsed = time.time() - start_time
+        logger.info(f"🎯 PRACTICE MODE CHANGED! From '{old_mode}' to '{mode}' (took {elapsed:.3f}s)")
+        
+        # Return None - tool executes silently for session tracking only
+        return 
+
+    @function_tool()
     async def get_progress_summary(
         self,
         context: RunContext[LearningSession],
@@ -470,7 +631,7 @@ IMPORTANT: Never use control characters, special formatting codes, or non-printa
         session = session_data
         
         elapsed = time.time() - start_time
-        logger.info(f"📊 LEARNING PROGRESS SUMMARY! Language: {session.target_language}, Level: {session.current_level}, Topics: {len(session.topics_covered)}, Vocabulary: {len(session.vocabulary_learned)}, Conversations: {session.conversation_count} (took {elapsed:.3f}s)")
+        logger.info(f"📊 LEARNING PROGRESS SUMMARY! Language: {session.target_language}, Level: {session.current_level}, Topics: {len(session.topics_covered)}, Vocabulary: {len(session.vocabulary_learned)}, Conversations: {session.conversation_count}, Mode: {session.practice_mode} (took {elapsed:.3f}s)")
         
         return {
             "status": "success",
@@ -479,6 +640,7 @@ IMPORTANT: Never use control characters, special formatting codes, or non-printa
             "topics_covered": session.topics_covered,
             "vocabulary_count": len(session.vocabulary_learned),
             "conversation_count": session.conversation_count,
+            "practice_mode": session.practice_mode,
             "message": f"You're making great progress learning {session.target_language}! You've covered {len(session.topics_covered)} topics and learned {len(session.vocabulary_learned)} words.",
         }
 
@@ -496,13 +658,16 @@ IMPORTANT: Never use control characters, special formatting codes, or non-printa
                 logger.info(f"✅ Resumed learning session: {session_data.target_language} - {session_data.current_level}")
                 
                 # Use generate_reply for Google RealtimeModel (works with built-in TTS)
-                greeting_instruction = f"""Welcome the user back warmly. 
-                Tell them you see they've been learning {session_data.target_language}. """
+                # CRITICAL: Do NOT ask which language they want to learn - they already have {session_data.target_language} saved
+                greeting_instruction = f"""Welcome the user back warmly in your call center style. 
+                Tell them you see they've been learning {session_data.target_language} and it's great to have them back. """
                 if session_data.topics_covered:
                     greeting_instruction += f"Mention they've covered {len(session_data.topics_covered)} topics so far. "
                 if session_data.vocabulary_learned:
                     greeting_instruction += f"Tell them they've learned {len(session_data.vocabulary_learned)} words. "
-                greeting_instruction += "Ask if they would like to continue where they left off, or start something new."
+                greeting_instruction += f"""Ask if they would like to continue practicing {session_data.target_language} where they left off, or explore something new today.
+                IMPORTANT: Do NOT ask which language they want to learn - they already have {session_data.target_language} as their saved preference. 
+                Automatically continue teaching in {session_data.target_language} unless they explicitly ask to switch languages."""
                 
                 await self.session.generate_reply(instructions=greeting_instruction)
             else:
@@ -596,8 +761,8 @@ async def entrypoint(ctx: agents.JobContext):
         # Lower min_speech_duration to catch pronunciation attempts
         # Higher min_silence_duration to wait for learners who speak slowly
         vad_config = {
-            "min_speech_duration": 0.15,      # Minimum speech duration (seconds) - lower for sensitivity
-            "min_silence_duration": 0.5,       # Minimum silence duration (seconds) - higher for slow speakers
+            "min_speech_duration": 0.2,      # Minimum speech duration (seconds) - lower for sensitivity
+            "min_silence_duration": 0.7,       # Minimum silence duration (seconds) - higher for slow speakers
             "activation_threshold": 0.6,         # Activity threshold for voice activity detection
             "prefix_padding_duration": 0.3,    # Padding duration before speech (seconds)
         }
@@ -611,8 +776,13 @@ async def entrypoint(ctx: agents.JobContext):
         llm_model = google.realtime.RealtimeModel(
             model="gemini-live-2.5-flash-preview-native-audio",
             voice="Aoede",
-            language="en-IN",
             vertexai=True,
+            realtime_input_config=types.RealtimeInputConfig(
+                automatic_activity_detection=types.AutomaticActivityDetection(
+                    disabled=False,
+                ),
+            activity_handling=types.ActivityHandling.START_OF_ACTIVITY_INTERRUPTS,
+            ),
             # Note: proactivity and enable_affective_dialog can sometimes cause the agent to wait/hang
             # Disable if experiencing stuck behavior
             proactivity=False,  # Set to False if agent gets stuck waiting
@@ -639,51 +809,10 @@ async def entrypoint(ctx: agents.JobContext):
         # Add conversation logging handlers with improved error handling and debugging
         @session.on("user_input_transcribed")
         def on_user_transcript(event):
-            """Log user input transcriptions - only FINAL transcriptions, and store in conversation_history"""
-            try:
-                # Try multiple ways to access transcript
-                transcript_text = None
-                if hasattr(event, 'transcript'):
-                    transcript_text = event.transcript
-                elif hasattr(event, 'text'):
-                    transcript_text = event.text
-                elif hasattr(event, 'message'):
-                    transcript_text = str(event.message)
-                
-                if transcript_text:
-                    transcript_text = transcript_text.strip()
-                    if transcript_text:
-                        is_final = getattr(event, 'is_final', False)
-                        
-                        # Only log FINAL transcriptions - skip INTERIM completely
-                        if is_final:
-                            logger.info(f"👤 USER: {transcript_text}")
-                            
-                            # Store in conversation_history
-                            try:
-                                session_data = session.userdata
-                                if session_data:
-                                    # Sanitize text before storing
-                                    sanitized_text = sanitize_text(transcript_text)
-                                    if sanitized_text:
-                                        # Add message to history
-                                        message_entry = {
-                                            "role": "user",
-                                            "content": sanitized_text,
-                                            "timestamp": datetime.now().isoformat()
-                                        }
-                                        session_data.conversation_history.append(message_entry)
-                                        
-                                        # Keep only last 100 messages
-                                        if len(session_data.conversation_history) > 100:
-                                            session_data.conversation_history = session_data.conversation_history[-100:]
-                                        
-                                        # Note: Session will be saved on exit, not during conversation
-                            except Exception as store_error:
-                                logger.debug(f"Error storing user message in history: {store_error}")
-                        # INTERIM transcriptions are completely skipped (not logged at any level)
-            except Exception as e:
-                logger.error(f"Error logging user transcript: {e}", exc_info=True)
+            """User input transcription event - logging and storage handled by conversation_item_added to avoid duplicates"""
+            # This handler is kept for potential future use, but logging and storage
+            # are handled by conversation_item_added to prevent duplicate entries
+            pass
         
         @session.on("agent_response")
         def on_agent_response(event):
