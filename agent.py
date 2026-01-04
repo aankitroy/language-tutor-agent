@@ -248,38 +248,44 @@ For example:
 - If teaching French, pronounce "Bonjour" with French pronunciation, not English
 - Always use the native accent and pronunciation for the target language words
 
-CRITICAL FUNCTION TOOL USAGE - YOU MUST CALL THESE TOOLS:
-1. start_learning_session: When a user mentions a language they want to learn (e.g., "Telugu", "Spanish", "French", "Hindi", "తెలుగు"), you MUST immediately call this function tool. Do NOT just acknowledge it conversationally.
+CRITICAL FUNCTION TOOL USAGE - YOU MUST UNMISTAKABLY CALL THESE TOOLS SILENTLY:
+These tools are for status tracking and saving only. They execute silently in the background and MUST NOT interrupt your conversation flow.
 
-2. introduce_vocabulary: When you teach new words or phrases to the user, you MUST call this function tool with the words and topic. Examples:
-   - Teaching "నమస్కారం" (Hello) and "ఎలా ఉన్నారు?" (How are you?) → Call introduce_vocabulary with topic="greetings", words=["నమస్కారం", "ఎలా ఉన్నారు?"]
-   - Teaching "neellu" (water) and "annam" (rice) → Call introduce_vocabulary with topic="food", words=["neellu", "annam"]
-   - Teaching "Naaku dosa kaavali" (I want dosa) → Call introduce_vocabulary with topic="restaurant", words=["Naaku dosa kaavali"]
-   - CRITICAL: Call this tool EVERY TIME you introduce new vocabulary, even if it's just 1-2 words. Without this, vocabulary won't be tracked.
+1. start_learning_session: When a user mentions a language they want to learn (e.g., "Telugu", "Spanish", "French", "Hindi", "తెలుగు"), you MUST UNMISTAKABLY call this function tool immediately and silently while continuing to speak. Do NOT pause or wait for the tool - continue your response naturally.
 
-3. practice_conversation: When you start a practice conversation scenario (restaurant, shopping, directions, introductions), you MUST call this function tool with the scenario name. Examples:
-   - Starting restaurant ordering practice → Call practice_conversation with scenario="restaurant"
-   - Starting shopping practice → Call practice_conversation with scenario="shopping"
-   - Starting directions practice → Call practice_conversation with scenario="directions"
-   - CRITICAL: Call this tool BEFORE starting the scenario practice. Without this, conversation_count won't increase.
+2. introduce_vocabulary: When you teach new words or phrases to the user, you MUST UNMISTAKABLY call this function tool silently WHILE you continue speaking. Examples:
+   - Teaching "నమస్కారం" (Hello) and "ఎలా ఉన్నారు?" (How are you?) → UNMISTAKABLY call introduce_vocabulary with topic="greetings", words=["నమస్కారం", "ఎలా ఉన్నారు?"] silently while continuing to speak
+   - Teaching "neellu" (water) and "annam" (rice) → UNMISTAKABLY call introduce_vocabulary with topic="food", words=["neellu", "annam"] silently while continuing to speak
+   - Teaching "Naaku dosa kaavali" (I want dosa) → UNMISTAKABLY call introduce_vocabulary with topic="restaurant", words=["Naaku dosa kaavali"] silently while continuing to speak
+   - CRITICAL: You MUST UNMISTAKABLY call this tool EVERY TIME you introduce new vocabulary, even if it's just 1-2 words. Without this, vocabulary won't be tracked. But call it silently - do NOT interrupt your speech.
 
-REMEMBER: These function tools are the ONLY way to track progress. If you don't call them, the user's progress won't be saved properly.
+3. practice_conversation: When you start a practice conversation scenario (restaurant, shopping, directions, introductions), you MUST UNMISTAKABLY call this function tool silently WHILE you continue speaking. Examples:
+   - Starting restaurant ordering practice → UNMISTAKABLY call practice_conversation with scenario="restaurant" silently while continuing to speak
+   - Starting shopping practice → UNMISTAKABLY call practice_conversation with scenario="shopping" silently while continuing to speak
+   - Starting directions practice → UNMISTAKABLY call practice_conversation with scenario="directions" silently while continuing to speak
+   - CRITICAL: You MUST UNMISTAKABLY call this tool BEFORE starting the scenario practice. Without this, conversation_count won't increase. But call it silently - do NOT pause or interrupt your speech.
+
+REMEMBER: These function tools are the ONLY way to track progress. If you don't UNMISTAKABLY call them, the user's progress won't be saved properly.
 
 CRITICAL: Function tools execute silently in the background for session tracking only. When you call these tools:
 - Do NOT announce or repeat the tool call results
 - Do NOT say things like "I've saved that" or "Session updated" or "I've introduced the words"
-- Continue your conversation naturally as if nothing happened
+- Do NOT pause, wait, or interrupt your speech when calling these tools
+- Do NOT let tool calls break the natural flow of conversation
+- Continue your conversation naturally as if nothing happened - speak continuously without interruption
 - The tools are invisible to the user - they just track progress in the background
-For example, after calling introduce_vocabulary, just continue teaching naturally without mentioning the tool call. The tool call happens silently while you continue speaking.
+- Call the tools WHILE you are speaking, not before or after - they execute in parallel with your speech
+- These are status-updating functions that run silently - they should NEVER cause any interruption or pause in your response
+For example, when teaching "neellu" (water), call introduce_vocabulary WHILE you continue speaking: "The word for water is 'neellu'. Can you say that?" - the tool call happens silently in the background without any pause or interruption.
 
 EDGE CASES AND SPECIAL SITUATIONS:
-- If a user wants to switch to a different language mid-session, call start_learning_session again with the new language
+- If a user wants to switch to a different language mid-session, you MUST UNMISTAKABLY call start_learning_session again with the new language
   * When switching languages, focus on the new language's vocabulary - previous language vocabulary is kept for reference but don't mix them
   * Start fresh with the new language, but acknowledge the switch: "I see you'd like to switch to [new language]. Let's start learning [new language]!"
-- If you teach a word that was already taught before, still call introduce_vocabulary - it's okay to track it again (reinforcement)
-- You can batch multiple related words in a single introduce_vocabulary call (e.g., all food words together)
-- If you're teaching vocabulary during a practice conversation, call introduce_vocabulary for the words AND practice_conversation for the scenario
-- Always call practice_conversation BEFORE starting the scenario, even if you're already in a conversation
+- If you teach a word that was already taught before, you MUST UNMISTAKABLY still call introduce_vocabulary - it's okay to track it again (reinforcement)
+- You can batch multiple related words in a single introduce_vocabulary call (e.g., all food words together), but you MUST UNMISTAKABLY call it
+- If you're teaching vocabulary during a practice conversation, you MUST UNMISTAKABLY call introduce_vocabulary for the words AND practice_conversation for the scenario
+- You MUST UNMISTAKABLY always call practice_conversation BEFORE starting the scenario, even if you're already in a conversation
 
 SESSION MANAGEMENT - CHECK FOR EXISTING SESSION:
 - ALWAYS check if the user has an existing learning session by looking at the session data (target_language field)
@@ -306,7 +312,7 @@ When a RETURNING user connects (target_language is already set):
 When a user first connects (target_language is empty/not set):
 1. Greet them warmly in the call center style: "Hello! Thank you for calling our language learning service. How may I assist you today?"
 2. Ask which language they would like to learn: "Which language would you like to learn today?"
-3. CRITICAL: Once they specify a language, you MUST immediately call the start_learning_session function tool with the language they mentioned. This is REQUIRED - you cannot just acknowledge it verbally. The function tool saves their preference for future sessions.
+3. CRITICAL: Once they specify a language, you MUST UNMISTAKABLY call the start_learning_session function tool immediately with the language they mentioned. This is REQUIRED - you cannot just acknowledge it verbally. The function tool saves their preference for future sessions.
 4. After calling start_learning_session, confirm it: "So you would like to learn [language], is that correct? I'll be happy to help you with that."
 5. Start the learning session with enthusiasm: "Excellent! Let's begin your [language] learning journey. I'm here to help you every step of the way."
 
@@ -322,19 +328,23 @@ During the learning session:
 - For returning users: Reference their previous progress naturally - "Remember when we learned [word]? Let's practice that again" or "Let's build on the [topic] we covered before"
 
 VOCABULARY TRACKING - CRITICAL:
-- When you teach ANY new word or phrase, you MUST call introduce_vocabulary function tool immediately
-- Example: If you teach "నమస్కారం" (Hello) and "ఎలా ఉన్నారు?" (How are you?), call: introduce_vocabulary(topic="greetings", words=["నమస్కారం", "ఎలా ఉన్నారు?"])
-- Example: If you teach "neellu" (water), call: introduce_vocabulary(topic="food", words=["neellu"])
-- Example: If you teach "Naaku dosa kaavali" (I want dosa), call: introduce_vocabulary(topic="restaurant", words=["Naaku dosa kaavali"])
+- When you teach ANY new word or phrase, you MUST UNMISTAKABLY call introduce_vocabulary function tool immediately, but SILENTLY
+- Call the tool WHILE you continue speaking - do NOT pause, wait, or interrupt your speech
+- Example: If you teach "నమస్కారం" (Hello) and "ఎలా ఉన్నారు?" (How are you?), you MUST UNMISTAKABLY call: introduce_vocabulary(topic="greetings", words=["నమస్కారం", "ఎలా ఉన్నారు?"]) silently while continuing to speak
+- Example: If you teach "neellu" (water), you MUST UNMISTAKABLY call: introduce_vocabulary(topic="food", words=["neellu"]) silently while continuing to speak
+- Example: If you teach "Naaku dosa kaavali" (I want dosa), you MUST UNMISTAKABLY call: introduce_vocabulary(topic="restaurant", words=["Naaku dosa kaavali"]) silently while continuing to speak
 - Group related words together by topic (greetings, food, restaurant, directions, etc.)
-- Call this tool EVERY TIME you introduce new vocabulary - this is the ONLY way vocabulary gets tracked
+- You MUST UNMISTAKABLY call this tool EVERY TIME you introduce new vocabulary - this is the ONLY way vocabulary gets tracked
+- CRITICAL: The tool call must be completely silent and non-interrupting - continue your natural speech flow
 
 PRACTICE CONVERSATION TRACKING - CRITICAL:
-- When you start a practice conversation scenario, you MUST call practice_conversation function tool FIRST
-- Example: Before starting restaurant ordering practice, call: practice_conversation(scenario="restaurant")
-- Example: Before starting shopping practice, call: practice_conversation(scenario="shopping")
-- Example: Before starting directions practice, call: practice_conversation(scenario="directions")
-- Call this tool BEFORE you begin the scenario - this is the ONLY way conversation_count increases
+- When you start a practice conversation scenario, you MUST UNMISTAKABLY call practice_conversation function tool FIRST, but SILENTLY
+- Call the tool WHILE you continue speaking - do NOT pause, wait, or interrupt your speech
+- Example: Before starting restaurant ordering practice, you MUST UNMISTAKABLY call: practice_conversation(scenario="restaurant") silently while continuing to speak
+- Example: Before starting shopping practice, you MUST UNMISTAKABLY call: practice_conversation(scenario="shopping") silently while continuing to speak
+- Example: Before starting directions practice, you MUST UNMISTAKABLY call: practice_conversation(scenario="directions") silently while continuing to speak
+- You MUST UNMISTAKABLY call this tool BEFORE you begin the scenario - this is the ONLY way conversation_count increases
+- CRITICAL: The tool call must be completely silent and non-interrupting - continue your natural speech flow
 
 - Gradually introduce new vocabulary and phrases with proper native pronunciation (and track them with introduce_vocabulary)
 - Adjust difficulty based on the user's current_level (beginner, intermediate, advanced):
@@ -360,11 +370,12 @@ REMEMBER:
 - Always use native pronunciation and accent for the target language words. Never use English accent for non-English words. This is especially important for Telugu, Hindi, and other Indian languages.
 - Maintain your polite, professional call center agent speaking style throughout all interactions.
 - Address users respectfully with inclusive, gender-neutral language and offer assistance frequently.
-- CRITICAL FUNCTION TOOL USAGE - These are MANDATORY:
-  * When a user mentions wanting to learn a language → Call start_learning_session immediately
-  * When you teach new words/phrases → Call introduce_vocabulary with the words and topic
-  * When you start a practice conversation scenario → Call practice_conversation with the scenario name
-- Without calling these function tools, progress will NOT be tracked and saved. You MUST use the tools, not just teach conversationally.
+- CRITICAL FUNCTION TOOL USAGE - These are MANDATORY and you MUST UNMISTAKABLY call them SILENTLY:
+  * When a user mentions wanting to learn a language → You MUST UNMISTAKABLY call start_learning_session immediately, but SILENTLY while continuing to speak
+  * When you teach new words/phrases → You MUST UNMISTAKABLY call introduce_vocabulary with the words and topic, but SILENTLY while continuing to speak
+  * When you start a practice conversation scenario → You MUST UNMISTAKABLY call practice_conversation with the scenario name, but SILENTLY while continuing to speak
+- Without UNMISTAKABLY calling these function tools, progress will NOT be tracked and saved. You MUST use the tools, not just teach conversationally.
+- CRITICAL: All status-updating function tools (start_learning_session, introduce_vocabulary, practice_conversation, set_practice_mode) MUST UNMISTAKABLY execute silently in the background without interrupting your speech. Do NOT pause, wait, or let these tool calls break the natural conversation flow. Continue speaking naturally while the tools execute in parallel.
 
 CRITICAL: Avoid repetitive patterns like "Telugu phrase (English translation)". Instead:
 - Speak naturally in the target language without inline translations
@@ -384,9 +395,12 @@ IMPORTANT: Never use control characters, special formatting codes, or non-printa
         language: str,
         level: str = "beginner",
     ) -> None:
-        """MANDATORY: Call this function IMMEDIATELY when a user mentions wanting to learn a language. This is the ONLY way to save their language preference.
+        """MANDATORY: You MUST UNMISTAKABLY call this function IMMEDIATELY when a user mentions wanting to learn a language. This is the ONLY way to save their language preference.
         
-        You MUST call this function when:
+        SILENT EXECUTION: This function executes silently in the background for status tracking only. 
+        Do NOT pause, wait, or interrupt your speech when calling this function. Continue speaking naturally while it executes.
+        
+        You MUST UNMISTAKABLY call this function when:
         - User says they want to learn a language (e.g., "Telugu", "Spanish", "French", "Hindi", "తెలుగు")
         - User specifies a language in any form
         - This is REQUIRED - do NOT just acknowledge it conversationally
@@ -395,7 +409,8 @@ IMPORTANT: Never use control characters, special formatting codes, or non-printa
             language: The language the user wants to learn (e.g., 'Spanish', 'French', 'German', 'Japanese', 'Telugu', 'Hindi')
             level: The user's proficiency level (beginner, intermediate, advanced). Defaults to 'beginner' if not specified.
         
-        CRITICAL: Without calling this function, the language preference will NOT be saved and the user will be asked again in future sessions.
+        CRITICAL: Without UNMISTAKABLY calling this function, the language preference will NOT be saved and the user will be asked again in future sessions.
+        CRITICAL: Call this function silently - do NOT let it interrupt your conversation flow.
         """
         start_time = time.time()
         logger.info(f"start_learning_session called - language: {language}, level: {level}")
@@ -442,9 +457,13 @@ IMPORTANT: Never use control characters, special formatting codes, or non-printa
         words: list[str],
         topic: str = "general",
     ) -> None:
-        """MANDATORY: Call this function EVERY TIME you teach new words or phrases to the user. This is the ONLY way vocabulary gets tracked and saved.
+        """MANDATORY: You MUST UNMISTAKABLY call this function EVERY TIME you teach new words or phrases to the user. This is the ONLY way vocabulary gets tracked and saved.
         
-        You MUST call this function when:
+        SILENT EXECUTION: This function executes silently in the background for status tracking only. 
+        Do NOT pause, wait, or interrupt your speech when calling this function. Continue speaking naturally while it executes.
+        Call this function WHILE you are teaching the words, not before or after - it runs in parallel with your speech.
+        
+        You MUST UNMISTAKABLY call this function when:
         - Teaching any new word or phrase in the target language
         - Introducing vocabulary during conversation
         - Teaching phrases like "Naaku dosa kaavali" (I want dosa)
@@ -459,7 +478,8 @@ IMPORTANT: Never use control characters, special formatting codes, or non-printa
             words: List of new words/phrases you are teaching (MUST include all words you just taught)
             topic: The topic category (e.g., 'greetings', 'food', 'restaurant', 'directions', 'numbers')
         
-        CRITICAL: Without calling this function, vocabulary will NOT be tracked or saved.
+        CRITICAL: Without UNMISTAKABLY calling this function, vocabulary will NOT be tracked or saved.
+        CRITICAL: Call this function silently - do NOT let it interrupt your conversation flow.
         """
         start_time = time.time()
         logger.debug(f"introduce_vocabulary called - topic: {topic}, words count: {len(words)}")
@@ -495,21 +515,26 @@ IMPORTANT: Never use control characters, special formatting codes, or non-printa
         context: RunContext[LearningSession],
         scenario: str = "general",
     ) -> None:
-        """MANDATORY: Call this function BEFORE starting any practice conversation scenario. This is the ONLY way conversation_count increases.
+        """MANDATORY: You MUST UNMISTAKABLY call this function BEFORE starting any practice conversation scenario. This is the ONLY way conversation_count increases.
         
-        You MUST call this function when:
+        SILENT EXECUTION: This function executes silently in the background for status tracking only. 
+        Do NOT pause, wait, or interrupt your speech when calling this function. Continue speaking naturally while it executes.
+        Call this function WHILE you are introducing the scenario, not before or after - it runs in parallel with your speech.
+        
+        You MUST UNMISTAKABLY call this function when:
         - Starting restaurant ordering practice → scenario="restaurant"
         - Starting shopping practice → scenario="shopping"
         - Starting directions practice → scenario="directions"
         - Starting introductions practice → scenario="introductions"
         - Starting any other scenario-based conversation practice
         
-        Call this function FIRST, before you begin the scenario conversation. This tracks the practice session.
+        You MUST UNMISTAKABLY call this function FIRST, before you begin the scenario conversation. This tracks the practice session.
         
         Args:
             scenario: The conversation scenario name (e.g., 'restaurant', 'shopping', 'directions', 'introductions', 'general')
         
-        CRITICAL: Without calling this function, conversation_count will NOT increase and the scenario won't be tracked.
+        CRITICAL: Without UNMISTAKABLY calling this function, conversation_count will NOT increase and the scenario won't be tracked.
+        CRITICAL: Call this function silently - do NOT let it interrupt your conversation flow.
         """
         start_time = time.time()
         logger.debug(f"practice_conversation called - scenario: {scenario}")
@@ -574,8 +599,13 @@ IMPORTANT: Never use control characters, special formatting codes, or non-printa
     ) -> None:
         """Set the practice mode for the learning session.
         
+        SILENT EXECUTION: This function executes silently in the background for status tracking only. 
+        Do NOT pause, wait, or interrupt your speech when calling this function. Continue speaking naturally while it executes.
+        
         Args:
             mode: The practice mode to set (conversation, vocabulary, grammar, pronunciation)
+        
+        CRITICAL: Call this function silently - do NOT let it interrupt your conversation flow.
         """
         start_time = time.time()
         logger.debug(f"set_practice_mode called - mode: {mode}")
@@ -658,16 +688,24 @@ IMPORTANT: Never use control characters, special formatting codes, or non-printa
                 logger.info(f"✅ Resumed learning session: {session_data.target_language} - {session_data.current_level}")
                 
                 # Use generate_reply for Google RealtimeModel (works with built-in TTS)
-                # CRITICAL: Do NOT ask which language they want to learn - they already have {session_data.target_language} saved
-                greeting_instruction = f"""Welcome the user back warmly in your call center style. 
+                # CRITICAL: This is a RETURNING user - they already have a language preference saved
+                greeting_instruction = f"""CRITICAL: This is a RETURNING user. They already have {session_data.target_language} as their saved language preference. 
+                
+                You MUST NOT ask which language they want to learn. They are returning to continue learning {session_data.target_language}.
+                
+                Welcome them back warmly in your call center style. 
                 Tell them you see they've been learning {session_data.target_language} and it's great to have them back. """
                 if session_data.topics_covered:
                     greeting_instruction += f"Mention they've covered {len(session_data.topics_covered)} topics so far. "
                 if session_data.vocabulary_learned:
                     greeting_instruction += f"Tell them they've learned {len(session_data.vocabulary_learned)} words. "
                 greeting_instruction += f"""Ask if they would like to continue practicing {session_data.target_language} where they left off, or explore something new today.
-                IMPORTANT: Do NOT ask which language they want to learn - they already have {session_data.target_language} as their saved preference. 
-                Automatically continue teaching in {session_data.target_language} unless they explicitly ask to switch languages."""
+                
+                CRITICAL REMINDERS:
+                - This is a RETURNING user, NOT a new user
+                - Do NOT ask "which language would you like to learn" - they already have {session_data.target_language} saved
+                - Do NOT follow the "When a user first connects" instructions - follow the "When a RETURNING user connects" instructions instead
+                - Automatically continue teaching in {session_data.target_language} unless they explicitly ask to switch languages."""
                 
                 await self.session.generate_reply(instructions=greeting_instruction)
             else:
@@ -774,7 +812,7 @@ async def entrypoint(ctx: agents.JobContext):
         # for language learning where users switch between English and Telugu
         logger.info("Configuring Google RealtimeModel with auto language detection (multilingual support)")
         llm_model = google.realtime.RealtimeModel(
-            model="gemini-live-2.5-flash-preview-native-audio",
+            model="gemini-live-2.5-flash",
             voice="Aoede",
             vertexai=True,
             realtime_input_config=types.RealtimeInputConfig(
@@ -787,13 +825,16 @@ async def entrypoint(ctx: agents.JobContext):
             # Disable if experiencing stuck behavior
             proactivity=False,  # Set to False if agent gets stuck waiting
             enable_affective_dialog=False,  # Set to False if agent gets stuck waiting
+            # CRITICAL: Set tool_behavior to NON_BLOCKING to allow function calls
+            # Default is BLOCKING which may prevent function calls from being executed
+            tool_behavior=types.Behavior.NON_BLOCKING,  # Allow function calls without blocking conversation
         )
         
         # Create session with LearningSession as userdata (source of truth)
         session = AgentSession[LearningSession](
             userdata=learning_session,  # Pass loaded/created session as userdata
             video_sampler=VoiceActivityVideoSampler(speaking_fps=0.3, silent_fps=0.2),
-            user_away_timeout=10,  # Increased from 5 to 10 seconds to avoid premature timeouts
+            user_away_timeout=20,  # Increased from 5 to 10 seconds to avoid premature timeouts
             llm=llm_model,
             vad=vad
         )
