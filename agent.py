@@ -738,18 +738,11 @@ IMPORTANT: Never use control characters, special formatting codes, or non-printa
                 session_storage.save_session(session_data.user_id, session_data)
                 logger.info(f"✅ Progress saved for user {session_data.user_id}")
                 
-                # Try to generate exit message using generate_reply (works with Google RealtimeModel)
+                # Generate short exit message - CRITICAL: No tool calls allowed
                 # This is optional - if it fails, we still saved the progress
                 try:
-                    if session_data.target_language:
-                        summary_instruction = f"""Thank the user for the learning session. 
-                        Mention that they've been learning {session_data.target_language}. 
-                        Tell them they've covered {len(session_data.topics_covered)} topics and learned {len(session_data.vocabulary_learned)} words. 
-                        Let them know their progress has been saved. Say goodbye warmly."""
-                    else:
-                        summary_instruction = "Thank the user for using the language tutor and say goodbye warmly."
-                    
-                    await self.session.generate_reply(instructions=summary_instruction)
+                    exit_instruction = "CRITICAL: Say a very brief goodbye. Keep it under 10 words. DO NOT call any function tools. Just say goodbye and thank them."
+                    await self.session.generate_reply(instructions=exit_instruction)
                     logger.info("Exit message generated successfully")
                 except Exception as reply_error:
                     # If generate_reply fails (e.g., TTS not available), just log it
@@ -758,9 +751,8 @@ IMPORTANT: Never use control characters, special formatting codes, or non-printa
                 logger.info("No session data to save")
                 # Try to generate a simple goodbye message
                 try:
-                    await self.session.generate_reply(
-                        instructions="Thank the user for using the language tutor and say goodbye warmly."
-                    )
+                    exit_instruction = "CRITICAL: Say a very brief goodbye. Keep it under 10 words. DO NOT call any function tools. Just say goodbye."
+                    await self.session.generate_reply(instructions=exit_instruction)
                 except Exception as reply_error:
                     logger.debug(f"Could not generate exit message: {reply_error}")
             
